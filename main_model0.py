@@ -49,7 +49,7 @@ model = tf.keras.models.Sequential([
     layers.Dense(32, activation='relu'),
 
 
-    layers.Dense(1, activation='sigmoid'),
+    layers.Dense(1, activation='sigmoid')
 ])
 
 model.summary()
