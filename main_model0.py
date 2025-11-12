@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Nov  6 09:59:50 2025
-
 @author: chaari
+Modifié par Aziz Brahim pour question 4
 """
 
 import matplotlib.pyplot as plt
@@ -15,19 +15,15 @@ from tensorflow.keras.utils import image_dataset_from_directory
 from keras.preprocessing.image import img_to_array
 import matplotlib.image as mpimg 
 from skimage import transform
-
+import os
 
 #----------------------------------------------------------------- #
-# -----------------    préparation des données  ------------------ #
+# -----------------    Préparation des données  ------------------ #
 #----------------------------------------------------------------- #
 base_dir = './PetImagesGray/PetImagesGray/'
 img_width, img_height = 200, 200
 
-# 🔁 Paramètres à tester
-Batch_Size = 32          # Exemple : essaye aussi 16, 64, 128
-nb_filters = 32          # Exemple : essaye 16, 32, 64
-taille_filtre = (5, 5)   # Exemple : essaye (3,3), (5,5)
-nb_neurones_dense = 64   # Exemple : essaye 32, 64, 128, 256
+Batch_Size = 32
 
 train_datagen = image_dataset_from_directory(
     base_dir,
@@ -46,123 +42,135 @@ test_datagen = image_dataset_from_directory(
     validation_split=0.1,
     batch_size=Batch_Size
 )
-#----------------------------------------------------------------- #
+
+# Normalisation pour [0,1]
+normalization_layer = layers.Rescaling(1./255)
+train_datagen = train_datagen.map(lambda x, y: (normalization_layer(x), y))
+test_datagen = test_datagen.map(lambda x, y: (normalization_layer(x), y))
 #----------------------------------------------------------------- #
 
 
 #----------------------------------------------------------------- #
-# ------------------------    le modèle  ------------------------- #
+# ------------------------    Modèle profond  -------------------- #
 #----------------------------------------------------------------- #
 model = tf.keras.models.Sequential([
-    # On fait varier nb_filters et taille_filtre
-    layers.Conv2D(nb_filters, taille_filtre, activation='relu', input_shape=(img_height, img_width, 3)),
-    layers.MaxPooling2D(2, 2),
+    # 1 couche conv 32 filtres
+    layers.Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
+    layers.MaxPooling2D((2, 2)),
+
+    # 3 couches conv 64 filtres
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.MaxPooling2D((2, 2)),
+
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.MaxPooling2D((2, 2)),
+
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.MaxPooling2D((2, 2)),
 
     layers.Flatten(),
-    # On fait varier nb_neurones_dense
-    layers.Dense(nb_neurones_dense, activation='relu'),
 
-    layers.Dropout(0.2),
-    # Couche de sortie binaire
+    # 3 couches denses 512 neurones + batchnorm + dropout
+    layers.Dense(512, activation='relu'),
+    layers.BatchNormalization(),
+    layers.Dropout(0.5),
+
+    layers.Dense(512, activation='relu'),
+    layers.BatchNormalization(),
+    layers.Dropout(0.5),
+
+    layers.Dense(512, activation='relu'),
+    layers.BatchNormalization(),
+    layers.Dropout(0.5),
+
+    # Couche de sortie
     layers.Dense(1, activation='sigmoid')
 ])
 
 model.summary()
 #----------------------------------------------------------------- #
-#----------------------------------------------------------------- #
 
 
 #----------------------------------------------------------------- #
-# -------------------    compilation du modèle  ------------------ #
+# -------------------    Compilation & Entraînement -------------- #
 #----------------------------------------------------------------- #
 model.compile(
     loss='binary_crossentropy',
     optimizer='adam',
     metrics=['accuracy']
 )
-#----------------------------------------------------------------- #
-#----------------------------------------------------------------- #
 
-#----------------------------------------------------------------- #
-# -------------------    Entrainement du modèle  ----------------- #
-#----------------------------------------------------------------- #
-Nb_epochs = 10
+Nb_epochs = 20
 history = model.fit(train_datagen, epochs=Nb_epochs, validation_data=test_datagen)
 #----------------------------------------------------------------- #
-#----------------------------------------------------------------- #
 
 
 #----------------------------------------------------------------- #
-# -----    Affichage des métriques d'apprentissage  -------------- #
+# -----------   Sauvegarde & affichage des métriques  ------------ #
 #----------------------------------------------------------------- #
-import os
-
-# Créer un dossier pour enregistrer les graphiques si nécessaire
-output_dir = './results'
+output_dir = './results_deep'
 os.makedirs(output_dir, exist_ok=True)
 
-# Convertir l'historique en DataFrame
 history_df = pd.DataFrame(history.history)
 
-# --- Courbe de perte ---
+# Courbe de perte
 plt.figure()
 history_df.loc[:, ['loss', 'val_loss']].plot(title="Courbe de perte")
 plt.xlabel('Époque')
 plt.ylabel('Loss')
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'courbe_perte.png'))  # sauvegarde
-plt.close()  # ferme la figure pour éviter chevauchement
+plt.savefig(os.path.join(output_dir, 'courbe_perte.png'))
+plt.close()
 
-# --- Courbe de précision ---
+# Courbe de précision
 plt.figure()
 history_df.loc[:, ['accuracy', 'val_accuracy']].plot(title="Courbe de précision")
 plt.xlabel('Époque')
 plt.ylabel('Accuracy')
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'courbe_precision.png'))  # sauvegarde
+plt.savefig(os.path.join(output_dir, 'courbe_precision.png'))
 plt.close()
 
-#----------------------------------------------------------------- #
+# Sauvegarde du modèle
+model.save(os.path.join(output_dir, 'model_cats_dogs_deep.h5'))
+print("✅ Modèle sauvegardé dans", output_dir)
 #----------------------------------------------------------------- #
 
 
 #----------------------------------------------------------------- #
 # -----------------    Tester quelques exemples  ----------------- #
 #----------------------------------------------------------------- #
-def predict_image(image_path, output_dir='./results'):
-    # Créer le dossier si nécessaire
+def predict_image(image_path, output_dir='./results_deep'):
     os.makedirs(output_dir, exist_ok=True)
     
-    # Charger et afficher l'image
+    # Charger l'image
     img = mpimg.imread(image_path)
     img = img[0:img_height, 0:img_width]
     plt.imshow(img)
     plt.axis("off")
     
-    # Faire la prédiction
+    # Préparer l'image
     img_array = img_to_array(img)
     img_array = transform.resize(img_array, (img_height, img_width, 3))
     img_array = np.expand_dims(img_array, axis=0)
+    img_array = img_array / 255.0  # normalisation
+    
+    # Prédiction
     result = model.predict(img_array, batch_size=1)
+    label = "Dog " if result >= 0.5 else "Cat "
+    print(f"Résultat brut : {result} → {label}")
     
-    label = "Dog" if result >= 0.5 else "Cat"
-    print(result)
-    print(label)
-    
-    # Ajouter le label au titre
-    plt.title(f"Prédiction: {label}")
-    
-    # Enregistrer l'image
+    # Afficher et sauvegarder
+    plt.title(f"Prédiction : {label}")
     filename = os.path.basename(image_path)
     save_path = os.path.join(output_dir, f"pred_{filename}")
     plt.savefig(save_path)
     plt.close()
-    
+
 predict_image(base_dir + 'Cat/20.jpg')
 predict_image(base_dir + 'Dog/20.jpg')
-
-
-#----------------------------------------------------------------- #
+predict_image(base_dir + 'Cat/30.jpg')
+predict_image(base_dir + 'Dog/30.jpg')
 #----------------------------------------------------------------- #
