@@ -3,7 +3,6 @@
 """
 Created on Thu Nov  6 09:59:50 2025
 @author: chaari
-Modifié par Aziz Brahim pour question 4
 """
 
 import matplotlib.pyplot as plt
@@ -100,7 +99,7 @@ model.compile(
     metrics=['accuracy']
 )
 
-Nb_epochs = 20
+Nb_epochs = 5
 history = model.fit(train_datagen, epochs=Nb_epochs, validation_data=test_datagen)
 #----------------------------------------------------------------- #
 
